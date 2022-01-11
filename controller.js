@@ -18,7 +18,7 @@ const createRoom = (req, res) => {
 	rooms[roomId] = {
 		roomId: roomId,
 		players: { player1: {}, player2: {} },
-		board: defaultBoard,
+		board: [['', '', ''], ['', '', ''], ['', '', '']],
 		turns: 0,
 		playerTurn: 'player1',
 		gameOver: false,
