@@ -1,9 +1,4 @@
-const { BulkWriteResult } = require("mongodb");
-const {
-	generateRoomId,
-	defaultBoard,
-	getCurrentDate,
-} = require("./utils.js");
+const { generateRoomId, getCurrentDate, checkWinner } = require("./utils.js");
 
 let rooms = {};
 
@@ -18,9 +13,13 @@ const createRoom = (req, res) => {
 	rooms[roomId] = {
 		roomId: roomId,
 		players: { player1: {}, player2: {} },
-		board: [['', '', ''], ['', '', ''], ['', '', '']],
+		board: [
+			["", "", ""],
+			["", "", ""],
+			["", "", ""],
+		],
 		turns: 0,
-		playerTurn: 'player1',
+		playerTurn: "player1",
 		gameOver: false,
 		winner: null,
 		winningRow: [],
@@ -31,38 +30,6 @@ const createRoom = (req, res) => {
 		room: rooms[roomId],
 	});
 };
-
-const checkWinner = (board, move) => {
-	for(let i = 0; i < 3; ++i) {
-		for(let j = 0; j < 3; ++j) {
-			if(board[i][j] !== move) 
-				break;
-			if(j == 2) 
-				return true;
-		}
-	}
-	for(let i = 0; i < 3; ++i) {
-		for(let j = 0; j < 3; ++j) {
-			if(board[j][i] !== move) 
-				break;
-			if(j == 2) 
-				return true;
-		}
-	}
-	for(let i = 0, j = 0; i < 3 && j < 3; ++i, ++j) {
-		if(board[i][j] !== move) 
-			break;
-		if(i == 2) 
-			return true;
-	}
-	for(let i = 0, j = 2; i < 3 && j >= 0; ++i, --j) {
-		if(board[i][j] !== move) 
-			break;
-		if(i == 2) 
-			return true;
-	}
-	return false;
-}
 
 const socketHandler = (io) => {
 	io.on("connection", (socket) => {
@@ -75,45 +42,64 @@ const socketHandler = (io) => {
 				rooms[roomId].players.player1 = {
 					username: username,
 					playerId: socket.id,
+					winCount: 0,
 				};
 			else if (!rooms[roomId].players.player2.playerId)
 				rooms[roomId].players.player2 = {
 					username: username,
 					playerId: socket.id,
+					winCount: 0,
 				};
 			else return;
 			socket.join(String(roomId));
-			io.to(String(roomId)).emit('room-data', rooms[roomId]);
+			io.to(String(roomId)).emit("room-data", rooms[roomId]);
 		});
 
-		socket.on('play-turn', (body) => {
-			const {position, roomId, player} = body;
-			if(!position || !roomId || !rooms[roomId]) 
-				return;
-			if(rooms[roomId].board[position[0]][position[1]] !== "") 
-				return;
-			if(player === 'player1') {
-				rooms[roomId].board[position[0]][position[1]] = 'X';
-				rooms[roomId].playerTurn = 'player2';
-			}
-			else {
-				rooms[roomId].board[position[0]][position[1]] = 'O';
-				rooms[roomId].playerTurn = 'player1';
+		socket.on("play-turn", (body) => {
+			const { position, roomId, player } = body;
+			if (!position || !roomId || !rooms[roomId] || rooms[roomId].gameOver) return;
+			if (rooms[roomId].board[position[0]][position[1]] !== "") return;
+			if (player === "player1") {
+				rooms[roomId].board[position[0]][position[1]] = "X";
+				rooms[roomId].playerTurn = "player2";
+			} else {
+				rooms[roomId].board[position[0]][position[1]] = "O";
+				rooms[roomId].playerTurn = "player1";
 			}
 			rooms[roomId].turns += 1;
-			if(rooms[roomId].turns >= 5) {
+			if (rooms[roomId].turns >= 5) {
 				let winner = "";
-				if(player === 'player1') 
-					winner = checkWinner(rooms[roomId].board, 'X');
-				else 
-					winner = checkWinner(rooms[roomId].board, 'O');
-				console.log(winner);
-				if(winner) {
+				if (player === "player1")
+					winner = checkWinner(rooms[roomId].board, "X");
+				else winner = checkWinner(rooms[roomId].board, "O");
+				if (winner) {
 					rooms[roomId].gameOver = true;
 					rooms[roomId].winner = player;
+					++rooms[roomId].players[player].winCount;
 				}
+				else if(rooms[roomId].turns === 9)
+					rooms[roomId].gameOver = true;
 			}
-			io.to(String(roomId)).emit('room-data', rooms[roomId]);
+			io.to(String(roomId)).emit("room-data", rooms[roomId]);
+		});
+
+		socket.on('play-again', (body) => {
+			const {roomId} = body;
+			if(!roomId) return; 
+			rooms[roomId] = {
+				...rooms[roomId],
+				board: [ 
+					["", "", ""],
+					["", "", ""],
+					["", "", ""],
+				],
+				turns: 0,
+				playerTurn: "player1",
+				gameOver: false,
+				winner: null,
+				winningRow: [],
+			};
+			io.to(String(roomId)).emit("room-data", rooms[roomId]);
 		})
 	});
 };
